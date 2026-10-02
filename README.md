@@ -1,9 +1,10 @@
-<img width="256" height="256" alt="icon" src="https://github.com/user-attachments/assets/be55b017-eb5d-45bd-b958-7bae449c8308" />
-# GiftWallpaper
+
+
+# GiftWallpaper <img width="32" height="32" alt="icon" src="https://github.com/user-attachments/assets/be55b017-eb5d-45bd-b958-7bae449c8308" />
 
 Open-source приложение для создания обоев с коллекционными подарками Telegram, написанное на Rust.
 
-> Метаданные и ресурсы подарков предоставляются [@GiftChanges](https://t.me/GiftChanges) — [api.changes.tg](https://api.changes.tg/).
+> Метаданные и ресурсы подарков предоставляются [@GiftChanges](https://t.me/GiftChanges)<img width="20" height="20" alt="photo_2026-10-02_22-54-39" src="https://github.com/user-attachments/assets/08a73ffb-6aa0-4461-a99d-4aca4d9c7e4b" />— [api.changes.tg](https://api.changes.tg/).
 
 ## Изменения в v0.2
 
@@ -16,6 +17,10 @@ Open-source приложение для создания обоев с колл�
 - Возможность вручную задать ширину и высоту от 256 до 7680 пикселей
 
 ## Возможности MVP
+
+
+Uploading photo_2025-01-04_11-37-16.mp4…
+
 
 - Нативный desktop-интерфейс на Rust с `egui` / `eframe`
 - Загрузка актуального списка доступных для улучшения Telegram Gifts
@@ -154,7 +159,8 @@ MIT. См. файл [LICENSE](LICENSE).
 
 ## Благодарности
 
-Спасибо **[@GiftChanges](https://t.me/GiftChanges)** за API с метаданными и ресурсами подарков на **api.changes.tg**.
+Спасибо **[@GiftChanges](https://t.me/GiftChanges)** <img width="20" height="20" alt="photo_2026-10-02_22-54-39" src="https://github.com/user-attachments/assets/08a73ffb-6aa0-4461-a99d-4aca4d9c7e4b" />за API с метаданными и ресурсами подарков на **api.changes.tg**.
+
 
 ## Open Source
 
