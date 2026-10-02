@@ -1,117 +1,129 @@
 # GiftWallpaper
 
-Open-source desktop wallpaper generator for Telegram collectible gifts, written in Rust.
+Open-source приложение для создания обоев с коллекционными подарками Telegram, написанное на Rust.
 
-> Gift metadata and assets are powered by [@GiftChanges](https://t.me/GiftChanges) — [api.changes.tg](https://api.changes.tg/).
+> Метаданные и ресурсы подарков предоставляются [@GiftChanges](https://t.me/GiftChanges) — [api.changes.tg](https://api.changes.tg/).
 
+## Изменения в v0.2
 
-## v0.2 changes
+- Всегда видимые полосы прокрутки для подарков, моделей и боковой панели
+- Поиск по моделям
+- Ползунок масштаба подарка
+- Ползунок вертикального положения
+- Корректное соотношение сторон предпросмотра для горизонтального и квадратного формата
+- Готовые пресеты для телефона, рабочего стола, 4K, квадрата и 16:10
+- Возможность вручную задать ширину и высоту от 256 до 7680 пикселей
 
-- Always-visible scrollbars for gifts, models and the sidebar
-- Model search
-- Gift scale slider
-- Vertical-position slider
-- Correct landscape/square preview aspect ratio
-- Phone, desktop, 4K, square and 16:10 presets
-- Fully custom width/height from 256 to 7680 pixels
+## Возможности MVP
 
-## MVP features
+- Нативный desktop-интерфейс на Rust с `egui` / `eframe`
+- Загрузка актуального списка доступных для улучшения Telegram Gifts
+- Загрузка моделей через `GET /gift/:gift`
+- Загрузка PNG-изображений моделей размером 1024 px
+- Четыре генерируемых стиля обоев
+- Разрешения для телефона и рабочего стола
+- Экспорт PNG
+- Локальный кэш изображений
+- Сетевые запросы выполняются в фоне, поэтому интерфейс не зависает
+- Сборки для Windows и Linux через GitHub Actions
+- Подготовка файлов для GitHub Releases
 
-- Native Rust desktop UI with `egui` / `eframe`
-- Loads the live list of upgradable Telegram gifts
-- Loads models from `GET /gift/:gift`
-- Downloads 1024px model assets
-- Four generated wallpaper styles
-- Phone and desktop resolutions
-- PNG export
-- Local image cache
-- Background networking so the UI does not freeze
-- Windows and Linux GitHub Actions builds
-- GitHub Release packaging
+## Как пользоваться
 
-## Screens / flow
+1. Найдите подарок.
+2. Выберите подарок.
+3. Выберите одну из его моделей.
+4. Выберите стиль обоев.
+5. Выберите разрешение для телефона или рабочего стола.
+6. Экспортируйте PNG в папку `exports/`.
 
-1. Search for a gift.
-2. Select a gift.
-3. Select one of its models.
-4. Choose a wallpaper preset.
-5. Choose phone or desktop resolution.
-6. Export PNG into the `exports/` directory.
-
-## Run locally
+## Локальный запуск
 
 ### Windows
 
-1. Install Rust from `https://rustup.rs/`.
-2. Extract this repository.
-3. Double-click `RUN_WINDOWS.bat`.
+1. Установите Rust с `https://rustup.rs/`.
+2. Распакуйте репозиторий.
+3. Откройте PowerShell в папке проекта и выполните:
 
-To validate formatting, compilation, tests and Clippy, double-click:
-
-```text
-CHECK_WINDOWS.bat
+```powershell
+cargo run --release
 ```
 
-### Linux (Debian/Ubuntu)
+Для проверки форматирования, компиляции, тестов и Clippy:
 
-First install native build dependencies:
+```powershell
+cargo fmt --all -- --check
+cargo check --all-targets
+cargo test
+cargo clippy --all-targets -- -D warnings
+```
+
+Ручная release-сборка:
+
+```powershell
+cargo build --release
+```
+
+Готовый бинарный файл будет находиться здесь:
+
+- Windows: `target/release/giftwallpaper.exe`
+- Linux: `target/release/giftwallpaper`
+
+### Linux (Debian / Ubuntu)
+
+Сначала установите системные зависимости:
 
 ```bash
 ./INSTALL_LINUX_DEPS.sh
 ```
 
-Install Rust from `https://rustup.rs/`, then:
+Установите Rust с `https://rustup.rs/`, затем:
 
 ```bash
 ./RUN_LINUX.sh
 ```
 
-Validation:
+Проверка:
 
 ```bash
 ./CHECK_LINUX.sh
 ```
 
-Manual release build on either platform:
+Ручная release-сборка:
 
 ```bash
 cargo build --release
 ```
 
-The binary will be located at:
-
-- Windows: `target/release/giftwallpaper.exe`
-- Linux: `target/release/giftwallpaper`
-
 ## GitHub Releases
 
-The repository includes `.github/workflows/release.yml`.
+В репозитории уже есть `.github/workflows/release.yml`.
 
-Create and push a version tag:
+Создайте и отправьте тег версии:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.2
+git push origin v0.2.2
 ```
 
-GitHub Actions will build:
+GitHub Actions соберёт:
 
 - `giftwallpaper-windows-x64.zip`
 - `giftwallpaper-linux-x64.tar.gz`
 
-and attach them to the GitHub Release for the tag.
+и добавит их в GitHub Release для этого тега.
 
-You can also run the Release workflow manually from the Actions tab.
+Workflow также можно запустить вручную во вкладке **Actions**.
 
-## Project layout
+## Структура проекта
 
 ```text
 giftwallpaper/
 ├── src/
-│   ├── main.rs       # native application entry point
-│   ├── app.rs        # egui UI and worker state
-│   ├── api.rs        # api.changes.tg client and defensive JSON parsing
-│   └── renderer.rs   # wallpaper rendering
+│   ├── main.rs       # точка входа нативного приложения
+│   ├── app.rs        # интерфейс egui и состояние приложения
+│   ├── api.rs        # клиент api.changes.tg и обработка JSON
+│   └── renderer.rs   # рендеринг обоев
 ├── .github/workflows/
 │   ├── ci.yml
 │   └── release.yml
@@ -121,38 +133,30 @@ giftwallpaper/
 └── Cargo.toml
 ```
 
-## Data source
+## Источник данных
 
-GiftWallpaper uses:
+GiftWallpaper использует:
 
 - `GET /gifts`
 - `GET /gift/:gift`
 - `GET /model/:gift/:model.png?size=1024`
 
-The app intentionally keeps the upstream integration small for the first release. Backdrops, symbols, original gifts, TGS animation and custom emoji support can be added later.
+На первом этапе интеграция с upstream API специально остаётся небольшой. Поддержку backdrops, symbols, оригинальных подарков, TGS-анимаций и custom emoji можно добавить позже.
 
-## Privacy
+## Конфиденциальность
 
-GiftWallpaper does not contain analytics or telemetry. Requests are sent only to the configured upstream Gift Changes API when data/assets are needed.
+GiftWallpaper не содержит аналитики или телеметрии. Запросы отправляются только к Gift Changes API, когда приложению нужно получить данные или ресурсы.
 
-## License
+## Лицензия
 
-MIT. See [LICENSE](LICENSE).
+MIT. См. файл [LICENSE](LICENSE).
 
-## Credits
+## Благодарности
 
-Thanks to **[@GiftChanges](https://t.me/GiftChanges)** for providing the gift metadata and assets API at **api.changes.tg**.
+Спасибо **[@GiftChanges](https://t.me/GiftChanges)** за API с метаданными и ресурсами подарков на **api.changes.tg**.
 
+## Open Source
 
-## Project repository
+Проект открыт для просмотра исходного кода и участия в разработке.
 
-GitHub: https://github.com/Kolt5ik
-
-The desktop app footer now includes an **Open Source · GitHub · Kolt5ik** link, while preserving the visible Gift Changes attribution required by the upstream API.
-
-
-## v0.2.2
-
-- Fixed footer GitHub link visibility.
-- `GitHub · Kolt5ik` is now always visible in the bottom center.
-- Added a separate `Open Source` label.
+GitHub: https://github.com/Kolt5ik/GiftWallpaper
