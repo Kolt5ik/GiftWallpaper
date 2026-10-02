@@ -1,6 +1,6 @@
 use image::{
-    imageops::{self, FilterType},
     DynamicImage, Rgba, RgbaImage,
+    imageops::{self, FilterType},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -123,14 +123,7 @@ mod tests {
     #[test]
     fn renders_expected_size() {
         let model = DynamicImage::new_rgba8(128, 128);
-        let result = render_wallpaper(
-            &model,
-            1920,
-            1080,
-            Preset::Midnight,
-            0.72,
-            0.50,
-        );
+        let result = render_wallpaper(&model, 1920, 1080, Preset::Midnight, 0.72, 0.50);
         assert_eq!(result.dimensions(), (1920, 1080));
     }
 }

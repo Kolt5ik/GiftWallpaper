@@ -9,7 +9,7 @@ use image::DynamicImage;
 
 use crate::{
     api::{GiftChangesClient, GiftDetails},
-    renderer::{render_wallpaper, Preset},
+    renderer::{Preset, render_wallpaper},
 };
 
 enum WorkerMessage {
@@ -215,8 +215,7 @@ impl GiftWallpaperApp {
             return;
         };
 
-        let [preview_w, preview_h] =
-            preview_dimensions(self.export_width, self.export_height, 640);
+        let [preview_w, preview_h] = preview_dimensions(self.export_width, self.export_height, 640);
 
         let wallpaper = render_wallpaper(
             model,
@@ -342,8 +341,7 @@ impl GiftWallpaperApp {
                     .models
                     .iter()
                     .filter(|model| {
-                        model_search.is_empty()
-                            || model.name.to_lowercase().contains(&model_search)
+                        model_search.is_empty() || model.name.to_lowercase().contains(&model_search)
                     })
                     .cloned()
                     .collect::<Vec<_>>()
@@ -416,16 +414,72 @@ impl GiftWallpaperApp {
         egui::ComboBox::from_id_salt("resolution")
             .selected_text(format!("{} × {}", self.export_width, self.export_height))
             .show_ui(ui, |ui| {
-                resolution_option(ui, &mut self.export_width, &mut self.export_height, 1080, 1920, "Phone 9:16");
-                resolution_option(ui, &mut self.export_width, &mut self.export_height, 1440, 2560, "Phone QHD");
-                resolution_option(ui, &mut self.export_width, &mut self.export_height, 2160, 3840, "Phone 4K");
+                resolution_option(
+                    ui,
+                    &mut self.export_width,
+                    &mut self.export_height,
+                    1080,
+                    1920,
+                    "Phone 9:16",
+                );
+                resolution_option(
+                    ui,
+                    &mut self.export_width,
+                    &mut self.export_height,
+                    1440,
+                    2560,
+                    "Phone QHD",
+                );
+                resolution_option(
+                    ui,
+                    &mut self.export_width,
+                    &mut self.export_height,
+                    2160,
+                    3840,
+                    "Phone 4K",
+                );
                 ui.separator();
-                resolution_option(ui, &mut self.export_width, &mut self.export_height, 1920, 1080, "Desktop FHD");
-                resolution_option(ui, &mut self.export_width, &mut self.export_height, 2560, 1440, "Desktop QHD");
-                resolution_option(ui, &mut self.export_width, &mut self.export_height, 3840, 2160, "Desktop 4K");
+                resolution_option(
+                    ui,
+                    &mut self.export_width,
+                    &mut self.export_height,
+                    1920,
+                    1080,
+                    "Desktop FHD",
+                );
+                resolution_option(
+                    ui,
+                    &mut self.export_width,
+                    &mut self.export_height,
+                    2560,
+                    1440,
+                    "Desktop QHD",
+                );
+                resolution_option(
+                    ui,
+                    &mut self.export_width,
+                    &mut self.export_height,
+                    3840,
+                    2160,
+                    "Desktop 4K",
+                );
                 ui.separator();
-                resolution_option(ui, &mut self.export_width, &mut self.export_height, 1080, 1080, "Square");
-                resolution_option(ui, &mut self.export_width, &mut self.export_height, 1920, 1200, "Desktop 16:10");
+                resolution_option(
+                    ui,
+                    &mut self.export_width,
+                    &mut self.export_height,
+                    1080,
+                    1080,
+                    "Square",
+                );
+                resolution_option(
+                    ui,
+                    &mut self.export_width,
+                    &mut self.export_height,
+                    1920,
+                    1200,
+                    "Desktop 16:10",
+                );
             });
 
         ui.horizontal(|ui| {
@@ -463,8 +517,7 @@ impl GiftWallpaperApp {
         if ui
             .add_enabled(
                 can_export,
-                egui::Button::new("Export PNG")
-                    .min_size(egui::vec2(ui.available_width(), 36.0)),
+                egui::Button::new("Export PNG").min_size(egui::vec2(ui.available_width(), 36.0)),
             )
             .clicked()
         {
@@ -482,22 +535,15 @@ impl GiftWallpaperApp {
         ui.vertical_centered(|ui| {
             ui.heading(self.selected_gift.as_deref().unwrap_or("Choose a gift"));
 
-            if let Some(details) = &self.details {
-                if let Some(id) = &details.id {
-                    ui.label(
-                        egui::RichText::new(format!("Gift ID: {id}"))
-                            .weak()
-                            .small(),
-                    );
-                }
+            if let Some(details) = &self.details
+                && let Some(id) = &details.id
+            {
+                ui.label(egui::RichText::new(format!("Gift ID: {id}")).weak().small());
             }
 
             ui.label(
-                egui::RichText::new(format!(
-                    "{} × {}",
-                    self.export_width, self.export_height
-                ))
-                .weak(),
+                egui::RichText::new(format!("{} × {}", self.export_width, self.export_height))
+                    .weak(),
             );
 
             ui.add_space(10.0);
@@ -547,21 +593,16 @@ impl GiftWallpaperApp {
         });
     }
 
-
-
     fn footer(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new(&self.status).weak().small());
 
-            ui.with_layout(
-                egui::Layout::right_to_left(egui::Align::Center),
-                |ui| {
-                    ui.hyperlink_to(
-                        "Powered by @GiftChanges · api.changes.tg",
-                        "https://api.changes.tg/",
-                    );
-                },
-            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.hyperlink_to(
+                    "Powered by @GiftChanges · api.changes.tg",
+                    "https://api.changes.tg/",
+                );
+            });
         });
 
         ui.add_space(2.0);
@@ -600,13 +641,14 @@ impl GiftWallpaperApp {
                 ui.label(format!("Version {}", env!("CARGO_PKG_VERSION")));
                 ui.add_space(8.0);
                 ui.label("Open-source desktop wallpaper generator for Telegram collectible gifts.");
-                ui.hyperlink_to("Project repository: github.com/Kolt5ik", "https://github.com/Kolt5ik");
+                ui.hyperlink_to(
+                    "Project repository: github.com/Kolt5ik",
+                    "https://github.com/Kolt5ik",
+                );
                 ui.add_space(12.0);
                 ui.separator();
                 ui.add_space(8.0);
-                ui.label(
-                    egui::RichText::new("Powered by @GiftChanges (api.changes.tg)").strong(),
-                );
+                ui.label(egui::RichText::new("Powered by @GiftChanges (api.changes.tg)").strong());
                 ui.hyperlink_to("Open Gift Changes API", "https://api.changes.tg/");
                 ui.add_space(8.0);
                 ui.label(
