@@ -1,8 +1,4 @@
-use std::{
-    fs,
-    path::PathBuf,
-    time::Duration,
-};
+use std::{fs, path::PathBuf, time::Duration};
 
 use serde_json::Value;
 
@@ -61,10 +57,10 @@ impl GiftChangesClient {
     pub fn model_png(&self, gift: &str, model: &str, size: u32) -> Result<Vec<u8>, String> {
         let cache_path = cache_file(gift, model, size);
 
-        if let Ok(bytes) = fs::read(&cache_path) {
-            if !bytes.is_empty() {
-                return Ok(bytes);
-            }
+        if let Ok(bytes) = fs::read(&cache_path)
+            && !bytes.is_empty()
+        {
+            return Ok(bytes);
         }
 
         let gift = urlencoding::encode(gift);
@@ -106,10 +102,7 @@ impl GiftChangesClient {
 
 fn parse_gift_names(value: &Value) -> Vec<String> {
     if let Some(array) = value.as_array() {
-        return array
-            .iter()
-            .filter_map(value_to_name)
-            .collect();
+        return array.iter().filter_map(value_to_name).collect();
     }
 
     if let Some(object) = value.as_object() {
