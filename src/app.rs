@@ -5,7 +5,8 @@ use std::{
 };
 
 use eframe::egui;
-use image::DynamicImage;
+use image::{DynamicImage, ImageFormat};
+use rfd::FileDialog;
 
 use crate::{
     api::{GiftChangesClient, GiftDetails},
@@ -20,6 +21,37 @@ enum WorkerMessage {
         model: String,
         result: Result<Vec<u8>, String>,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExportFormat {
+    Png,
+    Jpeg,
+}
+
+impl ExportFormat {
+    const ALL: [ExportFormat; 2] = [ExportFormat::Png, ExportFormat::Jpeg];
+
+    fn label(self) -> &'static str {
+        match self {
+            ExportFormat::Png => "PNG",
+            ExportFormat::Jpeg => "JPEG",
+        }
+    }
+
+    fn extension(self) -> &'static str {
+        match self {
+            ExportFormat::Png => "png",
+            ExportFormat::Jpeg => "jpg",
+        }
+    }
+
+    fn extensions(self) -> &'static [&'static str] {
+        match self {
+            ExportFormat::Png => &["png"],
+            ExportFormat::Jpeg => &["jpg", "jpeg"],
+        }
+    }
 }
 
 pub struct GiftWallpaperApp {
@@ -40,6 +72,7 @@ pub struct GiftWallpaperApp {
 
     export_width: u32,
     export_height: u32,
+    export_format: ExportFormat,
     model_scale: f32,
     model_y: f32,
 
@@ -74,6 +107,7 @@ impl GiftWallpaperApp {
 
             export_width: 1080,
             export_height: 1920,
+            export_format: ExportFormat::Png,
             model_scale: 0.72,
             model_y: 0.50,
 
@@ -244,7 +278,7 @@ impl GiftWallpaperApp {
             return;
         };
 
-        let image = render_wallpaper(
+        let wallpaper = render_wallpaper(
             model,
             self.export_width,
             self.export_height,
@@ -255,24 +289,40 @@ impl GiftWallpaperApp {
 
         let gift = self.selected_gift.as_deref().unwrap_or("gift");
         let model_name = self.selected_model.as_deref().unwrap_or("model");
+        let extension = self.export_format.extension();
 
         let file_name = format!(
-            "{}-{}-{}x{}.png",
+            "{}-{}-{}x{}.{}",
             slug(gift),
             slug(model_name),
             self.export_width,
-            self.export_height
+            self.export_height,
+            extension
         );
 
-        let export_dir = PathBuf::from("exports");
-        if let Err(error) = std::fs::create_dir_all(&export_dir) {
-            self.status = format!("Could not create exports folder: {error}");
+        let Some(path) = FileDialog::new()
+            .set_title("Сохранить обои")
+            .add_filter(self.export_format.label(), self.export_format.extensions())
+            .set_file_name(&file_name)
+            .save_file()
+        else {
+            self.status = "Export cancelled".to_owned();
             return;
-        }
+        };
 
-        let path = export_dir.join(file_name);
+        let path = ensure_extension(path, self.export_format);
 
-        match image.save(&path) {
+        let result = match self.export_format {
+            ExportFormat::Png => {
+                DynamicImage::ImageRgba8(wallpaper).save_with_format(&path, ImageFormat::Png)
+            }
+            ExportFormat::Jpeg => {
+                let rgb = DynamicImage::ImageRgba8(wallpaper).to_rgb8();
+                DynamicImage::ImageRgb8(rgb).save_with_format(&path, ImageFormat::Jpeg)
+            }
+        };
+
+        match result {
             Ok(()) => {
                 self.status = format!("Saved to {}", path.display());
             }
@@ -513,11 +563,23 @@ impl GiftWallpaperApp {
 
         ui.add_space(12.0);
 
+        ui.label("Export format");
+        egui::ComboBox::from_id_salt("export-format")
+            .selected_text(self.export_format.label())
+            .show_ui(ui, |ui| {
+                for format in ExportFormat::ALL {
+                    ui.selectable_value(&mut self.export_format, format, format.label());
+                }
+            });
+
+        ui.add_space(8.0);
+
         let can_export = self.model_image.is_some() && !self.loading_image;
         if ui
             .add_enabled(
                 can_export,
-                egui::Button::new("Export PNG").min_size(egui::vec2(ui.available_width(), 36.0)),
+                egui::Button::new(format!("Save {}…", self.export_format.label()))
+                    .min_size(egui::vec2(ui.available_width(), 36.0)),
             )
             .clicked()
         {
@@ -760,6 +822,14 @@ fn preview_dimensions(width: u32, height: u32, max_side: u32) -> [u32; 2] {
             .clamp(120.0, max_side as f64) as u32;
         [preview_w, preview_h]
     }
+}
+
+fn ensure_extension(mut path: PathBuf, format: ExportFormat) -> PathBuf {
+    if path.extension().is_none() {
+        path.set_extension(format.extension());
+    }
+
+    path
 }
 
 fn slug(value: &str) -> String {

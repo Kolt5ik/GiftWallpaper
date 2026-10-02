@@ -3,7 +3,6 @@ name = "giftwallpaper"
 version = "0.2.2"
 edition = "2024"
 description = "Open-source desktop wallpaper generator for Telegram collectible gifts"
-license = "MIT"
 repository = "https://github.com/Kolt5ik"
 
 [dependencies]
@@ -12,6 +11,7 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 reqwest = { version = "0.13.5", default-features = false, features = ["blocking", "json", "rustls"] }
 serde_json = "1"
 urlencoding = "2.1"
+rfd = "0.17.2"
 
 
 [profile.release]
@@ -19,3 +19,6 @@ opt-level = 3
 lto = "thin"
 codegen-units = 1
 strip = true
+
+[build-dependencies]
+winres = "0.1"
