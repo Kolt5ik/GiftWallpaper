@@ -1,3 +1,4 @@
+<img width="256" height="256" alt="icon" src="https://github.com/user-attachments/assets/be55b017-eb5d-45bd-b958-7bae449c8308" />
 # GiftWallpaper
 
 Open-source приложение для создания обоев с коллекционными подарками Telegram, написанное на Rust.
