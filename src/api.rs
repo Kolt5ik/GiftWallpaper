@@ -10,11 +10,27 @@ pub struct GiftModel {
     pub rarity: Option<f64>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GiftBackdropColors {
+    pub center: [u8; 3],
+    pub edge: [u8; 3],
+    pub symbol: [u8; 3],
+    pub text: [u8; 3],
+}
+
+#[derive(Debug, Clone)]
+pub struct GiftBackdrop {
+    pub name: String,
+    pub rarity: Option<f64>,
+    pub colors: Option<GiftBackdropColors>,
+}
+
 #[derive(Debug, Clone)]
 pub struct GiftDetails {
     pub name: String,
     pub id: Option<String>,
     pub models: Vec<GiftModel>,
+    pub backdrops: Vec<GiftBackdrop>,
 }
 
 #[derive(Clone)]
@@ -52,6 +68,44 @@ impl GiftChangesClient {
         let gift = urlencoding::encode(gift);
         let value = self.get_json(&format!("{API_BASE}/gift/{gift}"))?;
         parse_gift_details(&value)
+    }
+
+    pub fn backdrop_info(&self, gift: &str, backdrop: &str) -> Result<GiftBackdrop, String> {
+        let backdrop_name = backdrop.to_owned();
+        let gift = urlencoding::encode(gift);
+        let backdrop = urlencoding::encode(backdrop);
+        let value = self.get_json(&format!("{API_BASE}/backdrop/{gift}/{backdrop}/info"))?;
+
+        if let Some(info) = parse_backdrop(&value)
+            .or_else(|| value.get("backdrop").and_then(parse_backdrop))
+            .or_else(|| value.get("data").and_then(parse_backdrop))
+        {
+            return Ok(info);
+        }
+
+        let color_source = value
+            .get("backdrop")
+            .or_else(|| value.get("data"))
+            .unwrap_or(&value);
+
+        let colors = parse_backdrop_colors(color_source)
+            .ok_or_else(|| "the API returned backdrop info without readable colors".to_owned())?;
+
+        let rarity = color_source
+            .get("rarity")
+            .and_then(parse_number)
+            .or_else(|| {
+                color_source
+                    .get("rarity_per_mille")
+                    .and_then(parse_number)
+                    .map(|value| value / 10.0)
+            });
+
+        Ok(GiftBackdrop {
+            name: backdrop_name,
+            rarity,
+            colors: Some(colors),
+        })
     }
 
     pub fn model_png(&self, gift: &str, model: &str, size: u32) -> Result<Vec<u8>, String> {
@@ -115,7 +169,6 @@ fn parse_gift_names(value: &Value) -> Vec<String> {
             }
         }
 
-        // Some APIs use {"Gift Name": "..."} or {"Gift Name": id}.
         let keys: Vec<String> = object
             .keys()
             .filter(|key| !key.trim().is_empty())
@@ -161,7 +214,8 @@ fn parse_gift_details(value: &Value) -> Result<GiftDetails, String> {
 
     let models_value = value
         .get("models")
-        .or_else(|| value.get("data").and_then(|data| data.get("models")));
+        .or_else(|| value.get("data").and_then(|data| data.get("models")))
+        .or_else(|| nested_gift.and_then(|gift| gift.get("models")));
 
     let mut models = models_value
         .and_then(Value::as_array)
@@ -182,7 +236,12 @@ fn parse_gift_details(value: &Value) -> Result<GiftDetails, String> {
 
                     Some(GiftModel {
                         name,
-                        rarity: model.get("rarity").and_then(parse_number),
+                        rarity: model.get("rarity").and_then(parse_number).or_else(|| {
+                            model
+                                .get("rarity_per_mille")
+                                .and_then(parse_number)
+                                .map(|value| value / 10.0)
+                        }),
                     })
                 })
                 .collect::<Vec<_>>()
@@ -191,13 +250,202 @@ fn parse_gift_details(value: &Value) -> Result<GiftDetails, String> {
 
     models.sort_by_key(|model| model.name.to_lowercase());
 
+    let backdrops_value = value
+        .get("backdrops")
+        .or_else(|| value.get("data").and_then(|data| data.get("backdrops")))
+        .or_else(|| nested_gift.and_then(|gift| gift.get("backdrops")));
+
+    let mut backdrops = backdrops_value.map(parse_backdrops).unwrap_or_default();
+
+    backdrops.sort_by_key(|backdrop| backdrop.name.to_lowercase());
+
     if models.is_empty() {
         return Err(format!(
             "gift '{name}' was loaded, but no models were found in the response"
         ));
     }
 
-    Ok(GiftDetails { name, id, models })
+    Ok(GiftDetails {
+        name,
+        id,
+        models,
+        backdrops,
+    })
+}
+
+fn parse_backdrops(value: &Value) -> Vec<GiftBackdrop> {
+    if let Some(array) = value.as_array() {
+        return array.iter().filter_map(parse_backdrop).collect();
+    }
+
+    let Some(object) = value.as_object() else {
+        return Vec::new();
+    };
+
+    if object.contains_key("name") {
+        return parse_backdrop(value).into_iter().collect();
+    }
+
+    object
+        .iter()
+        .filter_map(|(name, entry)| {
+            if let Some(mut entry_object) = entry.as_object().cloned() {
+                entry_object
+                    .entry("name".to_owned())
+                    .or_insert_with(|| Value::String(name.clone()));
+                return parse_backdrop(&Value::Object(entry_object));
+            }
+
+            let name = name.trim();
+            if name.is_empty() {
+                return None;
+            }
+
+            Some(GiftBackdrop {
+                name: name.to_owned(),
+                rarity: parse_number(entry),
+                colors: None,
+            })
+        })
+        .collect()
+}
+
+fn parse_backdrop(value: &Value) -> Option<GiftBackdrop> {
+    if let Some(name) = value.as_str() {
+        let name = name.trim();
+        return (!name.is_empty()).then(|| GiftBackdrop {
+            name: name.to_owned(),
+            rarity: None,
+            colors: None,
+        });
+    }
+
+    let name = value
+        .get("name")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|name| !name.is_empty())?
+        .to_owned();
+
+    let rarity = value.get("rarity").and_then(parse_number).or_else(|| {
+        value
+            .get("rarity_per_mille")
+            .and_then(parse_number)
+            .map(|value| value / 10.0)
+    });
+
+    let colors = parse_backdrop_colors(value);
+
+    Some(GiftBackdrop {
+        name,
+        rarity,
+        colors,
+    })
+}
+
+fn parse_backdrop_colors(value: &Value) -> Option<GiftBackdropColors> {
+    let colors = value
+        .get("colors")
+        .or_else(|| value.get("colour"))
+        .or_else(|| value.get("palette"))
+        .unwrap_or(value);
+
+    let center = color_field(colors, &["center_color", "centerColor", "center"])?;
+    let edge = color_field(colors, &["edge_color", "edgeColor", "edge"])?;
+    let symbol = color_field(
+        colors,
+        &[
+            "symbol_color",
+            "symbolColor",
+            "pattern_color",
+            "patternColor",
+            "symbol",
+            "pattern",
+        ],
+    )
+    .unwrap_or(center);
+    let text = color_field(colors, &["text_color", "textColor", "text"]).unwrap_or(symbol);
+
+    Some(GiftBackdropColors {
+        center,
+        edge,
+        symbol,
+        text,
+    })
+}
+
+fn color_field(value: &Value, keys: &[&str]) -> Option<[u8; 3]> {
+    for key in keys {
+        if let Some(color) = value.get(*key).and_then(parse_rgb) {
+            return Some(color);
+        }
+    }
+
+    None
+}
+
+fn parse_rgb(value: &Value) -> Option<[u8; 3]> {
+    if let Some(number) = value.as_u64() {
+        return rgb_from_u64(number);
+    }
+
+    if let Some(number) = value.as_i64()
+        && number >= 0
+    {
+        return rgb_from_u64(number as u64);
+    }
+
+    if let Some(text) = value.as_str() {
+        let text = text.trim();
+        let hex = text
+            .strip_prefix('#')
+            .or_else(|| text.strip_prefix("0x"))
+            .or_else(|| text.strip_prefix("0X"));
+
+        if let Some(hex) = hex
+            && let Ok(number) = u64::from_str_radix(hex, 16)
+        {
+            return rgb_from_u64(number);
+        }
+
+        if text.len() == 6
+            && text.chars().all(|ch| ch.is_ascii_hexdigit())
+            && let Ok(number) = u64::from_str_radix(text, 16)
+        {
+            return rgb_from_u64(number);
+        }
+
+        if let Ok(number) = text.parse::<u64>() {
+            return rgb_from_u64(number);
+        }
+    }
+
+    if let Some(array) = value.as_array()
+        && array.len() >= 3
+    {
+        let red = array[0].as_u64()?.min(255) as u8;
+        let green = array[1].as_u64()?.min(255) as u8;
+        let blue = array[2].as_u64()?.min(255) as u8;
+        return Some([red, green, blue]);
+    }
+
+    let object = value.as_object()?;
+    let red = object.get("r")?.as_u64()?.min(255) as u8;
+    let green = object.get("g")?.as_u64()?.min(255) as u8;
+    let blue = object.get("b")?.as_u64()?.min(255) as u8;
+    Some([red, green, blue])
+}
+
+fn rgb_from_u64(number: u64) -> Option<[u8; 3]> {
+    if number > 0xFF_FF_FF {
+        return None;
+    }
+
+    Some([
+        ((number >> 16) & 0xFF) as u8,
+        ((number >> 8) & 0xFF) as u8,
+        (number & 0xFF) as u8,
+    ])
 }
 
 fn parse_number(value: &Value) -> Option<f64> {
@@ -279,12 +527,24 @@ mod tests {
     }
 
     #[test]
-    fn parses_gift_details() {
+    fn parses_gift_details_with_backdrop_colors() {
         let value = serde_json::json!({
             "gift": {"name": "Scared Cat", "id": "123"},
             "models": [
                 {"name": "Black Cat", "rarity": 0.5},
                 {"name": "White Cat", "rarity": "1.2%"}
+            ],
+            "backdrops": [
+                {
+                    "name": "Aquamarine",
+                    "rarity_per_mille": 10,
+                    "colors": {
+                        "center_color": 0x55AAFF,
+                        "edge_color": 0x123456,
+                        "symbol_color": 0x88CCFF,
+                        "text_color": 0xFFFFFF
+                    }
+                }
             ]
         });
 
@@ -292,5 +552,32 @@ mod tests {
         assert_eq!(details.name, "Scared Cat");
         assert_eq!(details.id.as_deref(), Some("123"));
         assert_eq!(details.models.len(), 2);
+        assert_eq!(details.backdrops.len(), 1);
+        assert_eq!(details.backdrops[0].name, "Aquamarine");
+        assert_eq!(
+            details.backdrops[0].colors.unwrap().center,
+            [0x55, 0xAA, 0xFF]
+        );
+    }
+
+    #[test]
+    fn parses_hex_backdrop_colors() {
+        let value = serde_json::json!({
+            "name": "Amber",
+            "colors": {
+                "centerColor": "#ffb347",
+                "edgeColor": "8a4b08",
+                "symbolColor": "0xFFD27F",
+                "textColor": 16777215
+            }
+        });
+
+        let backdrop = parse_backdrop(&value).unwrap();
+        let colors = backdrop.colors.unwrap();
+
+        assert_eq!(colors.center, [0xFF, 0xB3, 0x47]);
+        assert_eq!(colors.edge, [0x8A, 0x4B, 0x08]);
+        assert_eq!(colors.symbol, [0xFF, 0xD2, 0x7F]);
+        assert_eq!(colors.text, [0xFF, 0xFF, 0xFF]);
     }
 }
