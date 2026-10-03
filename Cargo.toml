@@ -1,6 +1,6 @@
 [package]
 name = "giftwallpaper"
-version = "0.2.2"
+version = "0.3.0"
 edition = "2024"
 description = "Open-source desktop wallpaper generator for Telegram collectible gifts"
 repository = "https://github.com/Kolt5ik"
