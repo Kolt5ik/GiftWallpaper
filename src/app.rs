@@ -9,8 +9,8 @@ use image::{DynamicImage, ImageFormat};
 use rfd::FileDialog;
 
 use crate::{
-    api::{GiftChangesClient, GiftDetails},
-    renderer::{Preset, render_wallpaper},
+    api::{GiftBackdrop, GiftBackdropColors, GiftChangesClient, GiftDetails},
+    renderer::{Preset, TelegramBackdropPalette, render_wallpaper},
 };
 
 enum WorkerMessage {
@@ -20,6 +20,11 @@ enum WorkerMessage {
         gift: String,
         model: String,
         result: Result<Vec<u8>, String>,
+    },
+    Backdrop {
+        gift: String,
+        backdrop: String,
+        result: Result<GiftBackdrop, String>,
     },
 }
 
@@ -64,6 +69,8 @@ pub struct GiftWallpaperApp {
     selected_gift: Option<String>,
     details: Option<GiftDetails>,
     selected_model: Option<String>,
+    selected_backdrop: Option<String>,
+    backdrop_colors: Option<GiftBackdropColors>,
 
     model_image: Option<DynamicImage>,
     preview_texture: Option<egui::TextureHandle>,
@@ -79,6 +86,7 @@ pub struct GiftWallpaperApp {
     loading_gifts: bool,
     loading_details: bool,
     loading_image: bool,
+    loading_backdrop: bool,
     status: String,
     show_about: bool,
 }
@@ -99,6 +107,8 @@ impl GiftWallpaperApp {
             selected_gift: None,
             details: None,
             selected_model: None,
+            selected_backdrop: None,
+            backdrop_colors: None,
 
             model_image: None,
             preview_texture: None,
@@ -114,6 +124,7 @@ impl GiftWallpaperApp {
             loading_gifts: false,
             loading_details: false,
             loading_image: false,
+            loading_backdrop: false,
             status: "Loading gifts…".to_owned(),
             show_about: false,
         };
@@ -143,6 +154,9 @@ impl GiftWallpaperApp {
         self.status = format!("Loading {gift}…");
         self.details = None;
         self.selected_model = None;
+        self.selected_backdrop = None;
+        self.backdrop_colors = None;
+        self.loading_backdrop = false;
         self.model_search.clear();
         self.model_image = None;
         self.preview_texture = None;
@@ -174,6 +188,24 @@ impl GiftWallpaperApp {
         });
     }
 
+    fn load_backdrop_info(&mut self, gift: String, backdrop: String) {
+        self.loading_backdrop = true;
+        self.status = format!("Loading backdrop {backdrop}…");
+
+        let tx = self.tx.clone();
+
+        thread::spawn(move || {
+            let result =
+                GiftChangesClient::new().and_then(|api| api.backdrop_info(&gift, &backdrop));
+
+            let _ = tx.send(WorkerMessage::Backdrop {
+                gift,
+                backdrop,
+                result,
+            });
+        });
+    }
+
     fn process_worker_messages(&mut self, ctx: &egui::Context) {
         while let Ok(message) = self.rx.try_recv() {
             match message {
@@ -197,8 +229,11 @@ impl GiftWallpaperApp {
                     match result {
                         Ok(details) => {
                             let model_count = details.models.len();
-                            self.status =
-                                format!("{} loaded · {} models", details.name, model_count);
+                            let backdrop_count = details.backdrops.len();
+                            self.status = format!(
+                                "{} loaded · {} models · {} backdrops",
+                                details.name, model_count, backdrop_count
+                            );
                             self.selected_gift = Some(details.name.clone());
                             self.details = Some(details);
                         }
@@ -237,6 +272,36 @@ impl GiftWallpaperApp {
                         }
                     }
                 }
+                WorkerMessage::Backdrop {
+                    gift,
+                    backdrop,
+                    result,
+                } => {
+                    self.loading_backdrop = false;
+
+                    if self.selected_gift.as_deref() != Some(gift.as_str())
+                        || self.selected_backdrop.as_deref() != Some(backdrop.as_str())
+                    {
+                        continue;
+                    }
+
+                    match result {
+                        Ok(info) => {
+                            if let Some(colors) = info.colors {
+                                self.backdrop_colors = Some(colors);
+                                self.rebuild_preview(ctx);
+                                self.status = format!("{backdrop} backdrop ready");
+                            } else {
+                                self.backdrop_colors = None;
+                                self.status = format!("Backdrop {backdrop} has no readable colors");
+                            }
+                        }
+                        Err(error) => {
+                            self.backdrop_colors = None;
+                            self.status = format!("Backdrop error: {error}");
+                        }
+                    }
+                }
             }
 
             ctx.request_repaint();
@@ -256,6 +321,7 @@ impl GiftWallpaperApp {
             preview_w,
             preview_h,
             self.preset,
+            self.telegram_palette(),
             self.model_scale,
             self.model_y,
         );
@@ -272,6 +338,15 @@ impl GiftWallpaperApp {
         ));
     }
 
+    fn telegram_palette(&self) -> Option<TelegramBackdropPalette> {
+        self.backdrop_colors.map(|colors| TelegramBackdropPalette {
+            center: colors.center,
+            edge: colors.edge,
+            symbol: colors.symbol,
+            text: colors.text,
+        })
+    }
+
     fn export_wallpaper(&mut self) {
         let Some(model) = self.model_image.as_ref() else {
             self.status = "Choose a model first".to_owned();
@@ -283,6 +358,7 @@ impl GiftWallpaperApp {
             self.export_width,
             self.export_height,
             self.preset,
+            self.telegram_palette(),
             self.model_scale,
             self.model_y,
         );
@@ -290,11 +366,17 @@ impl GiftWallpaperApp {
         let gift = self.selected_gift.as_deref().unwrap_or("gift");
         let model_name = self.selected_model.as_deref().unwrap_or("model");
         let extension = self.export_format.extension();
+        let backdrop_suffix = self
+            .selected_backdrop
+            .as_deref()
+            .map(|backdrop| format!("-{}", slug(backdrop)))
+            .unwrap_or_default();
 
         let file_name = format!(
-            "{}-{}-{}x{}.{}",
+            "{}-{}{}-{}x{}.{}",
             slug(gift),
             slug(model_name),
+            backdrop_suffix,
             self.export_width,
             self.export_height,
             extension
@@ -424,18 +506,114 @@ impl GiftWallpaperApp {
 
         ui.separator();
 
-        ui.label("Style");
         let mut preview_changed = false;
+        ui.label("Background");
 
-        egui::ComboBox::from_id_salt("preset")
-            .selected_text(self.preset.label())
+        let backdrops = self
+            .details
+            .as_ref()
+            .map(|details| details.backdrops.clone())
+            .unwrap_or_default();
+
+        let selected_background = self
+            .selected_backdrop
+            .as_deref()
+            .unwrap_or("Custom style")
+            .to_owned();
+
+        egui::ComboBox::from_id_salt("background")
+            .selected_text(selected_background)
             .show_ui(ui, |ui| {
-                for preset in Preset::ALL {
-                    preview_changed |= ui
-                        .selectable_value(&mut self.preset, preset, preset.label())
-                        .changed();
+                if ui
+                    .selectable_label(self.selected_backdrop.is_none(), "Custom style")
+                    .clicked()
+                {
+                    self.selected_backdrop = None;
+                    self.backdrop_colors = None;
+                    self.loading_backdrop = false;
+                    preview_changed = true;
+                }
+
+                if !backdrops.is_empty() {
+                    ui.separator();
+                }
+
+                for backdrop in backdrops {
+                    let selected =
+                        self.selected_backdrop.as_deref() == Some(backdrop.name.as_str());
+
+                    ui.horizontal(|ui| {
+                        if let Some(colors) = backdrop.colors {
+                            let (rect, _) = ui
+                                .allocate_exact_size(egui::vec2(22.0, 14.0), egui::Sense::hover());
+                            ui.painter().rect_filled(
+                                rect,
+                                4.0,
+                                egui::Color32::from_rgb(
+                                    colors.center[0],
+                                    colors.center[1],
+                                    colors.center[2],
+                                ),
+                            );
+                        } else {
+                            ui.add_space(26.0);
+                        }
+
+                        let label = if let Some(rarity) = backdrop.rarity {
+                            format!("{}  ·  {}", backdrop.name, format_rarity(rarity))
+                        } else {
+                            backdrop.name.clone()
+                        };
+
+                        if ui.selectable_label(selected, label).clicked() {
+                            self.selected_backdrop = Some(backdrop.name.clone());
+
+                            if let Some(colors) = backdrop.colors {
+                                self.backdrop_colors = Some(colors);
+                                self.loading_backdrop = false;
+                                preview_changed = true;
+                            } else if let Some(gift) = self.selected_gift.clone() {
+                                self.backdrop_colors = None;
+                                self.load_backdrop_info(gift, backdrop.name.clone());
+                            }
+                        }
+                    });
                 }
             });
+
+        if self.loading_backdrop {
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label("Loading Telegram colors…");
+            });
+        } else if self.selected_backdrop.is_some() && self.backdrop_colors.is_some() {
+            ui.label(
+                egui::RichText::new("Telegram backdrop colors")
+                    .weak()
+                    .small(),
+            );
+        } else if self.selected_backdrop.is_some() {
+            ui.label(
+                egui::RichText::new("Backdrop colors are unavailable")
+                    .weak()
+                    .small(),
+            );
+        }
+
+        if self.selected_backdrop.is_none() {
+            ui.add_space(6.0);
+            ui.label("Style");
+
+            egui::ComboBox::from_id_salt("preset")
+                .selected_text(self.preset.label())
+                .show_ui(ui, |ui| {
+                    for preset in Preset::ALL {
+                        preview_changed |= ui
+                            .selectable_value(&mut self.preset, preset, preset.label())
+                            .changed();
+                    }
+                });
+        }
 
         ui.add_space(8.0);
         ui.label("Gift size");
@@ -754,7 +932,8 @@ impl eframe::App for GiftWallpaperApp {
 
         self.about_window(&ctx);
 
-        if self.loading_gifts || self.loading_details || self.loading_image {
+        if self.loading_gifts || self.loading_details || self.loading_image || self.loading_backdrop
+        {
             ctx.request_repaint_after(std::time::Duration::from_millis(80));
         }
     }
